@@ -1,3 +1,45 @@
+# Fork note: Linux round video messages fix
+
+This fork of [Telegram Desktop](https://github.com/telegramdesktop/tdesktop)
+fixes **video messages (round video notes) failing to record on Linux** when
+the webcam has a slow USB control channel. Recording failed after ~5 seconds
+with *"Video recording error. Please check your camera and microphone."*
+while voice messages and the camera itself worked fine.
+
+Root cause: such cameras (example: XXS-250522-A "Hy-UXGA(B5M2)-Camera")
+answer every `VIDIOC_TRY_FMT` with a real UVC probe negotiation (~33 ms each),
+tg_owt's `DeviceInfoV4l2::FillCapabilities` blindly makes 15x13 = 195 of them
+(~7 s per recording attempt), and `RoundVideoRecorder` aborts after
+`kInitTimeout` = 5 s — so the camera never started in time.
+
+Changes in this fork:
+
+- `Telegram/SourceFiles/ui/controls/round_video_recorder.cpp`: raise
+  `kInitTimeout` from 5 s to 15 s (defensive fix — slow cameras can still
+  start; works with stock tg_owt).
+- Build against [my tg_owt fork](https://github.com/brosoll/tg_owt) for the
+  main fix: it enumerates `VIDIOC_ENUM_FMT`/`VIDIOC_ENUM_FRAMESIZES` first
+  (instant, no USB traffic on uvcvideo) and only probes combinations the
+  device can accept — 195 slow probes become ~10, ~7 s becomes ~0.3 s. It
+  also stops reporting bogus capabilities for unsupported formats.
+
+Build example (Arch/CachyOS, system Qt, own API credentials from
+https://my.telegram.org):
+
+```bash
+# 1. Build and install the fixed tg_owt into a local prefix
+git clone https://github.com/brosoll/tg_owt.git
+cmake -B tg_owt/out -S tg_owt -G Ninja     -DCMAKE_BUILD_TYPE=Release     -DCMAKE_INSTALL_PREFIX=$PWD/tg_owt-install     -DTG_OWT_USE_PIPEWIRE=ON -DTG_OWT_DLOPEN_PIPEWIRE=OFF     -DTG_OWT_BUILD_AUDIO_BACKENDS=OFF
+cmake --build tg_owt/out && cmake --install tg_owt/out
+
+# 2. Build this fork against it
+git clone --recursive https://github.com/brosoll/tdesktop.git
+cmake -B tdesktop/out -S tdesktop/Telegram -G Ninja     -DCMAKE_BUILD_TYPE=Release     -DCMAKE_PREFIX_PATH=$PWD/tg_owt-install     -DTDESKTOP_API_ID=YOUR_API_ID     -DTDESKTOP_API_HASH=YOUR_API_HASH
+cmake --build tdesktop/out
+```
+
+Original README follows.
+
 # [Telegram Desktop][telegram_desktop] – Official Messenger
 
 This is the complete source code and the build instructions for the official [Telegram][telegram] messenger desktop client, based on the [Telegram API][telegram_api] and the [MTProto][telegram_proto] secure protocol.

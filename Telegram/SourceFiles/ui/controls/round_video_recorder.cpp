@@ -33,7 +33,14 @@ constexpr auto kAudioBitRate = 64 * 1024;
 constexpr auto kVideoBitRate = 2 * 1024 * 1024;
 constexpr auto kMinDuration = crl::time(200);
 constexpr auto kMaxDuration = 60 * crl::time(1000);
-constexpr auto kInitTimeout = 5 * crl::time(1000);
+// Some webcams with slow USB control channels take several seconds to
+// enumerate V4L2 capabilities before the first frame can arrive (every
+// VIDIOC_TRY_FMT can be a full UVC probe negotiation). 5 seconds was not
+// enough for such cameras, so recording video messages always failed with
+// a "Video recording error". Combined with the tg_owt fix that skips
+// probing unsupported formats this is generous; without it, it at least
+// gives slow cameras a chance to start.
+constexpr auto kInitTimeout = 15 * crl::time(1000);
 constexpr auto kBlurredSize = 64;
 constexpr auto kMinithumbsPerSecond = 5;
 constexpr auto kMinithumbsInRow = 16;
